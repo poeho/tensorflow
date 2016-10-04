@@ -1,4 +1,4 @@
-/* Copyright 2016 Google Inc. All Rights Reserved.
+/* Copyright 2016 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,19 +18,21 @@ limitations under the License.
 
 #include <vector>
 
+#include "tensorflow/core/common_runtime/stats_publisher_interface.h"
 #include "tensorflow/core/public/session_options.h"
 
 namespace tensorflow {
 
 class Device;
-class MasterEnv;
+struct MasterEnv;
 class MasterSessionInterface;
 
 namespace internal {
 
-MasterSessionInterface* NewMasterSession(const SessionOptions& options,
-                                         const MasterEnv* env,
-                                         std::vector<Device*>* remote_devs);
+MasterSessionInterface* NewMasterSession(
+    const SessionOptions& options, const MasterEnv* env,
+    std::vector<Device*>* remote_devs,
+    StatsPublisherFactory stats_publisher_factory);
 
 }  // namespace internal
 }  // end namespace tensorflow

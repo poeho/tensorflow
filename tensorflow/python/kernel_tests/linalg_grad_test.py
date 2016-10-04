@@ -1,4 +1,4 @@
-# Copyright 2015 Google Inc. All Rights Reserved.
+# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,33 +22,42 @@ import numpy as np
 import tensorflow as tf
 
 
+class ShapeTest(tf.test.TestCase):
+
+  def testBatchGradientUnknownSize(self):
+    with self.test_session():
+      batch_size = tf.constant(3)
+      matrix_size = tf.constant(4)
+      batch_identity = tf.tile(
+          tf.expand_dims(
+              tf.diag(tf.ones([matrix_size])), 0), [batch_size, 1, 1])
+      determinants = tf.matrix_determinant(batch_identity)
+      reduced = tf.reduce_sum(determinants)
+      sum_grad = tf.gradients(reduced, batch_identity)[0]
+      self.assertAllClose(batch_identity.eval(), sum_grad.eval())
+
+
 class MatrixUnaryFunctorGradientTest(tf.test.TestCase):
   pass  # Filled in below
 
 
-def _GetMatrixUnaryFunctorGradientTest(functor_, batch_functor_, dtype_,
-                                       shape_):
+def _GetMatrixUnaryFunctorGradientTest(functor_, dtype_, shape_, **kwargs_):
 
   def Test(self):
     with self.test_session():
       np.random.seed(1)
-      m = np.random.uniform(low=1.0,
-                            high=100.0,
+      m = np.random.uniform(low=-1.0,
+                            high=1.0,
                             size=np.prod(shape_)).reshape(shape_).astype(dtype_)
       a = tf.constant(m)
-      if len(shape_) == 2 and functor_ is not None:
-        b = functor_(a)
-      elif batch_functor_ is not None:
-        b = batch_functor_(a)
-      else:
-        return
+      b = functor_(a, **kwargs_)
 
       # Optimal stepsize for central difference is O(epsilon^{1/3}).
       epsilon = np.finfo(dtype_).eps
-      delta = epsilon**(1.0 / 3.0)
+      delta = 0.1 * epsilon**(1.0 / 3.0)
       # tolerance obtained by looking at actual differences using
       # np.linalg.norm(theoretical-numerical, np.inf) on -mavx build
-      tol = 1e-3
+      tol = 1e-3 if dtype_ == np.float64 else 0.05
 
       theoretical, numerical = tf.test.compute_gradient(a,
                                                         a.get_shape().as_list(),
@@ -64,35 +73,28 @@ class MatrixBinaryFunctorGradientTest(tf.test.TestCase):
   pass  # Filled in below
 
 
-def _GetMatrixBinaryFunctorGradientTest(functor_, batch_functor_, dtype_,
-                                        shape_):
+def _GetMatrixBinaryFunctorGradientTest(functor_, dtype_, shape_, **kwargs_):
 
   def Test(self):
     with self.test_session():
       np.random.seed(1)
-      m = np.random.uniform(low=1.0,
-                            high=100.0,
+      m = np.random.uniform(low=-1.0,
+                            high=1.0,
                             size=np.prod(shape_)).reshape(shape_).astype(dtype_)
       a = tf.constant(m)
 
-      n = np.random.uniform(low=1.0,
-                            high=100.0,
+      n = np.random.uniform(low=-1.0,
+                            high=1.0,
                             size=np.prod(shape_)).reshape(shape_).astype(dtype_)
       b = tf.constant(n)
-
-      if len(shape_) == 2 and functor_ is not None:
-        c = functor_(a, b)
-      elif batch_functor_ is not None:
-        c = batch_functor_(a, b)
-      else:
-        return
+      c = functor_(a, b, **kwargs_)
 
       # Optimal stepsize for central difference is O(epsilon^{1/3}).
       epsilon = np.finfo(dtype_).eps
-      delta = epsilon**(1.0 / 3.0)
+      delta = 0.1 * epsilon**(1.0 / 3.0)
       # tolerance obtained by looking at actual differences using
       # np.linalg.norm(theoretical-numerical, np.inf) on -mavx build
-      tol = 1e-3
+      tol = 1e-3 if dtype_ == np.float64 else 0.05
 
       # The gradients for a and b may be of very different magnitudes,
       # so to not get spurious failures we test them separately.
@@ -107,14 +109,50 @@ def _GetMatrixBinaryFunctorGradientTest(functor_, batch_functor_, dtype_,
 
   return Test
 
-
 if __name__ == '__main__':
-  # TODO(rmlarsen,irving): Reenable float32 once tolerances are fixed
-  # The test used to loop over (np.float, np.double), both of which are float64.
-
   # Tests for gradients of binary matrix operations.
-  for dtype in (np.float64,):
-    for size in 2, 3, 5, 10:
+  for dtype in np.float32, np.float64:
+    for size in 2, 5, 10:
+      # We skip the rank 4, size 10 case: it is slow and conceptually covered
+      # by the other cases.
+      for extra in [(), (2,), (3,)] + [(3, 2)] * (size < 10):
+        for adjoint in False, True:
+          shape = extra + (size, size)
+          name = '%s_%s_adj_%s' % (dtype.__name__, '_'.join(map(str, shape)),
+                                   str(adjoint))
+          setattr(MatrixBinaryFunctorGradientTest,
+                  'testMatrixSolveGradient_' + name,
+                  _GetMatrixBinaryFunctorGradientTest(tf.matrix_solve,
+                                                      dtype, shape,
+                                                      adjoint=adjoint))
+          if dtype == np.float64:
+            # TODO(rmlarsen): The gradients of triangular solves seems
+            # particularly sensitive to round-off when computed in float32.
+            # In some tests, a few gradient elements differ by 25% between the
+            # numerical and theoretical values. Disable tests for float32 until
+            # we understand this better.
+            setattr(
+                MatrixBinaryFunctorGradientTest,
+                'testMatrixTriangularSolveGradient_' + name + '_low_True',
+                _GetMatrixBinaryFunctorGradientTest(
+                    tf.matrix_triangular_solve,
+                    dtype,
+                    shape,
+                    adjoint=adjoint,
+                    lower=True))
+            setattr(
+                MatrixBinaryFunctorGradientTest,
+                'testMatrixTriangularSolveGradient_' + name + '_low_False',
+                _GetMatrixBinaryFunctorGradientTest(
+                    tf.matrix_triangular_solve,
+                    dtype,
+                    shape,
+                    adjoint=adjoint,
+                    lower=False))
+
+  # Tests for gradients of unary matrix operations.
+  for dtype in np.float32, np.float64:
+    for size in 2, 5, 10:
       # We skip the rank 4, size 10 case: it is slow and conceptually covered
       # by the other cases.
       for extra in [(), (2,), (3,)] + [(3, 2)] * (size < 10):
@@ -123,25 +161,10 @@ if __name__ == '__main__':
         setattr(MatrixUnaryFunctorGradientTest,
                 'testMatrixInverseGradient_' + name,
                 _GetMatrixUnaryFunctorGradientTest(tf.matrix_inverse,
-                                                   tf.batch_matrix_inverse,
                                                    dtype, shape))
-        setattr(MatrixBinaryFunctorGradientTest,
-                'testMatrixSolveGradient_' + name,
-                _GetMatrixBinaryFunctorGradientTest(tf.matrix_solve,
-                                                    tf.batch_matrix_solve,
-                                                    dtype, shape))
-
-  # Tests for gradients of unary matrix operations.
-  for dtype in (np.float64,):
-    for size in 2, 5, 10:
-      # increase this list to check batch version
-      for extra in [()]:
-        shape = extra + (size, size)
-        name = '%s_%s' % (dtype.__name__, '_'.join(map(str, shape)))
         setattr(MatrixUnaryFunctorGradientTest,
                 'testMatrixUnaryFunctorGradient_' + name,
                 _GetMatrixUnaryFunctorGradientTest(tf.matrix_determinant,
-                                                   tf.batch_matrix_determinant,
                                                    dtype, shape))
 
   tf.test.main()

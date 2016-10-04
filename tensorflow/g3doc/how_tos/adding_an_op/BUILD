@@ -67,7 +67,6 @@ py_test(
     size = "small",
     srcs = ["zero_out_1_test.py"],
     srcs_version = "PY2AND3",
-    tags = ["noasan"],
     deps = [
         ":zero_out_op_1",
         "//tensorflow:tensorflow_py",
@@ -79,12 +78,10 @@ py_test(
     size = "small",
     srcs = ["zero_out_2_test.py"],
     srcs_version = "PY2AND3",
-    tags = ["noasan"],
     deps = [
         ":zero_out_grad_2",
         ":zero_out_op_2",
         "//tensorflow:tensorflow_py",
-        "//tensorflow/python:kernel_tests/gradient_checker",
     ],
 )
 
@@ -93,7 +90,6 @@ py_test(
     size = "small",
     srcs = ["zero_out_3_test.py"],
     srcs_version = "PY2AND3",
-    tags = ["noasan"],
     deps = [
         ":zero_out_op_3",
         "//tensorflow:tensorflow_py",

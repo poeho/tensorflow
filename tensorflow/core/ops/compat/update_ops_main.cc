@@ -1,4 +1,4 @@
-/* Copyright 2015 Google Inc. All Rights Reserved.
+/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,7 +27,8 @@ namespace tensorflow {
 namespace {
 
 void WriteUpdateTo(const string& directory) {
-  OpCompatibilityLib compatibility(directory);
+  OpCompatibilityLib compatibility(
+      directory, strings::StrCat("v", TF_MAJOR_VERSION), nullptr);
 
   // Write full copy of all ops to ops.pbtxt.
   Env* env = Env::Default();

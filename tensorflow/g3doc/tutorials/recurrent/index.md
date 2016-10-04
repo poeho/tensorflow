@@ -12,9 +12,9 @@ In this tutorial we will show how to train a recurrent neural network on
 a challenging task of language modeling. The goal of the problem is to fit a
 probabilistic model which assigns probabilities to sentences. It does so by
 predicting next words in a text given a history of previous words. For this
-purpose we will use the Penn Tree Bank (PTB) dataset, which is a popular
-benchmark for measuring quality of these models, whilst being small and
-relatively fast to train.
+purpose we will use the [Penn Tree Bank](http://www.cis.upenn.edu/~treebank/)
+(PTB) dataset, which is a popular benchmark for measuring quality of these
+models, whilst being small and relatively fast to train.
 
 Language modeling is key to many interesting problems such as speech
 recognition, machine translation, or image captioning. It is also fun, too --
@@ -61,7 +61,7 @@ The basic pseudocode looks as follows:
 lstm = rnn_cell.BasicLSTMCell(lstm_size)
 # Initial state of the LSTM memory.
 state = tf.zeros([batch_size, lstm.state_size])
-
+probabilities = []
 loss = 0.0
 for current_batch_of_words in words_in_dataset:
     # The value of state is updated after processing each batch of words.
@@ -69,7 +69,7 @@ for current_batch_of_words in words_in_dataset:
 
     # The LSTM output can be used to make next word predictions
     logits = tf.matmul(output, softmax_w) + softmax_b
-    probabilities = tf.nn.softmax(logits)
+    probabilities.append(tf.nn.softmax(logits))
     loss += loss_function(probabilities, target_words)
 ```
 
@@ -155,8 +155,9 @@ the second and so on.
 We have a class called `MultiRNNCell` that makes the implementation seamless:
 
 ```python
-lstm = rnn_cell.BasicLSTMCell(lstm_size)
-stacked_lstm = rnn_cell.MultiRNNCell([lstm] * number_of_layers)
+lstm = rnn_cell.BasicLSTMCell(lstm_size, state_is_tuple=False)
+stacked_lstm = rnn_cell.MultiRNNCell([lstm] * number_of_layers,
+    state_is_tuple=False)
 
 initial_state = state = stacked_lstm.zero_state(batch_size, tf.float32)
 for i in range(num_steps):
@@ -172,14 +173,16 @@ final_state = state
 ## Run the Code
 
 We are assuming you have already installed via the pip package, have cloned the
-tensorflow git repository, and are in the root of the git tree. (If building
-from source, build the `tensorflow/models/rnn/ptb:ptb_word_lm` target using
-bazel).
+tensorflow git repository, and are in the root of the git tree. (If [building
+from source](
+https://github.com/tensorflow/tensorflow/blob/master/tensorflow/g3doc/get_started/os_setup.md#installing-from-sources), build the `tensorflow/models/rnn/ptb:ptb_word_lm` target using
+[bazel](https://github.com/bazelbuild/bazel)).
 
 Next:
-```
+
+```bash
 cd tensorflow/models/rnn/ptb
-python ptb_word_lm --data_path=/tmp/simple-examples/data/ --model small
+python ptb_word_lm.py --data_path=/tmp/simple-examples/data/ --model small
 ```
 
 There are 3 supported model configurations in the tutorial code: "small",

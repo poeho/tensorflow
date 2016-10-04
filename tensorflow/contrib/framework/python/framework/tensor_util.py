@@ -1,4 +1,4 @@
-# Copyright 2015 Google Inc. All Rights Reserved.
+# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,366 +13,32 @@
 # limitations under the License.
 # ==============================================================================
 
-"""Tensor utility functions.
-
-@@assert_negative
-@@assert_positive
-@@assert_non_negative
-@@assert_non_positive
-@@assert_less
-@@assert_less_equal
-@@assert_rank
-@@assert_rank_at_least
-@@assert_same_float_dtype
-@@assert_scalar_int
-@@is_numeric_tensor
-@@is_non_decreasing
-@@is_strictly_increasing
-@@local_variable
-@@reduce_sum_n
-@@with_shape
-@@with_same_shape
-"""
+"""Tensor utility functions."""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import numpy as np
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import tensor_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
-from tensorflow.python.ops import logging_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variables
 
+
 __all__ = [
-    'assert_same_float_dtype', 'is_numeric_tensor', 'assert_scalar_int',
-    'local_variable', 'reduce_sum_n', 'with_shape', 'with_same_shape',
-    'assert_positive', 'assert_negative', 'assert_non_positive',
-    'assert_non_negative', 'assert_less', 'assert_less_equal',
-    'assert_rank', 'assert_rank_at_least',
-    'is_strictly_increasing', 'is_non_decreasing',
-]
-
-
-NUMERIC_TYPES = frozenset([dtypes.float32, dtypes.float64, dtypes.int8,
-                           dtypes.int16, dtypes.int32, dtypes.int64,
-                           dtypes.uint8, dtypes.qint8, dtypes.qint32,
-                           dtypes.quint8, dtypes.complex64])
-
-
-def assert_negative(x, data=None, summarize=None, name=None):
-  """Assert the condition `x < 0` holds element-wise.
-
-  Negative means, for every element `x[i]` of `x`, we have `x[i] < 0`.
-  If `x` is empty this is trivially satisfied.
-
-  Args:
-    x:  Numeric `Tensor`.
-    data:  The tensors to print out if the condition is False.  Defaults to
-      error message and first few entries of `x`.
-    summarize: Print this many entries of each tensor.
-    name: A name for this operation (optional).  Defaults to "assert_negative".
-
-  Returns:
-    Op raising `InvalidArgumentError` unless `x` is all negative.
-  """
-  with ops.op_scope([x, data], name, 'assert_negative'):
-    x = ops.convert_to_tensor(x, name='x')
-    if data is None:
-      data = ['Condition x < 0 did not hold element-wise: x = ', x.name, x]
-    zero = ops.convert_to_tensor(0, dtype=x.dtype)
-    return assert_less(x, zero, data=data, summarize=summarize)
-
-
-def assert_positive(x, data=None, summarize=None, name=None):
-  """Assert the condition `x > 0` holds element-wise.
-
-  Positive means, for every element `x[i]` of `x`, we have `x[i] > 0`.
-  If `x` is empty this is trivially satisfied.
-
-  Args:
-    x:  Numeric `Tensor`.
-    data:  The tensors to print out if the condition is False.  Defaults to
-      error message and first few entries of `x`.
-    summarize: Print this many entries of each tensor.
-    name: A name for this operation (optional).  Defaults to "assert_negative".
-
-  Returns:
-    Op raising `InvalidArgumentError` unless `x` is all positive.
-  """
-  with ops.op_scope([x, data], name, 'assert_positive'):
-    x = ops.convert_to_tensor(x, name='x')
-    if data is None:
-      data = ['Condition x > 0 did not hold element-wise: x = ', x.name, x]
-    zero = ops.convert_to_tensor(0, dtype=x.dtype)
-    return assert_less(zero, x, data=data, summarize=summarize)
-
-
-def assert_non_negative(x, data=None, summarize=None, name=None):
-  """Assert the condition `x >= 0` holds element-wise.
-
-  Non-negative means, for every element `x[i]` of `x`, we have `x[i] >= 0`.
-  If `x` is empty this is trivially satisfied.
-
-  Args:
-    x:  Numeric `Tensor`.
-    data:  The tensors to print out if the condition is False.  Defaults to
-      error message and first few entries of `x`.
-    summarize: Print this many entries of each tensor.
-    name: A name for this operation (optional).
-      Defaults to "assert_non_negative".
-
-  Returns:
-    Op raising `InvalidArgumentError` unless `x` is all non-negative.
-  """
-  with ops.op_scope([x, data], name, 'assert_non_negative'):
-    x = ops.convert_to_tensor(x, name='x')
-    if data is None:
-      data = ['Condition x >= 0 did not hold element-wise: x = ', x.name, x]
-    zero = ops.convert_to_tensor(0, dtype=x.dtype)
-    return assert_less_equal(zero, x, data=data, summarize=summarize)
-
-
-def assert_non_positive(x, data=None, summarize=None, name=None):
-  """Assert the condition `x <= 0` holds element-wise.
-
-  Non-positive means, for every element `x[i]` of `x`, we have `x[i] <= 0`.
-  If `x` is empty this is trivially satisfied.
-
-  Args:
-    x:  Numeric `Tensor`.
-    data:  The tensors to print out if the condition is False.  Defaults to
-      error message and first few entries of `x`.
-    summarize: Print this many entries of each tensor.
-    name: A name for this operation (optional).
-      Defaults to "assert_non_positive".
-
-  Returns:
-    Op raising `InvalidArgumentError` unless `x` is all non-positive.
-  """
-  with ops.op_scope([x, data], name, 'assert_non_positive'):
-    x = ops.convert_to_tensor(x, name='x')
-    if data is None:
-      data = ['Condition x <= 0 did not hold element-wise: x = ', x.name, x]
-    zero = ops.convert_to_tensor(0, dtype=x.dtype)
-    return assert_less_equal(x, zero, data=data, summarize=summarize)
-
-
-def assert_less(x, y, data=None, summarize=None, name=None):
-  """Assert the condition `x < y` holds element-wise.
-
-  This condition holds if for every pair of (possibly broadcast) elements
-  `x[i]`, `y[i]`, we have `x[i] < y[i]`.
-  If both `x` and `y` are empty, this is trivially satisfied.
-
-  Args:
-    x:  Numeric `Tensor`.
-    y:  Numeric `Tensor`, same dtype as and broadcastable to `x`.
-    data:  The tensors to print out if the condition is False.  Defaults to
-      error message and first few entries of `x`, `y`.
-    summarize: Print this many entries of each tensor.
-    name: A name for this operation (optional).  Defaults to "assert_less".
-
-  Returns:
-    Op that raises `InvalidArgumentError` if `x < y` is False.
-  """
-  with ops.op_scope([x, y, data], name, 'assert_less'):
-    x = ops.convert_to_tensor(x, name='x')
-    y = ops.convert_to_tensor(y, name='y')
-    if data is None:
-      data = [
-          'Condition x < y did not hold element-wise: x = ',
-          x.name, x, 'y = ', y.name, y]
-    condition = math_ops.reduce_all(math_ops.less(x, y))
-    return logging_ops.Assert(condition, data, summarize=summarize)
-
-
-def assert_less_equal(x, y, data=None, summarize=None, name=None):
-  """Assert the condition `x <= y` holds element-wise.
-
-  This condition holds if for every pair of (possibly broadcast) elements
-  `x[i]`, `y[i]`, we have `x[i] <= y[i]`.
-  If both `x` and `y` are empty, this is trivially satisfied.
-
-  Args:
-    x:  Numeric `Tensor`.
-    y:  Numeric `Tensor`, same dtype as and broadcastable to `x`.
-    data:  The tensors to print out if the condition is False.  Defaults to
-      error message and first few entries of `x`, `y`.
-    summarize: Print this many entries of each tensor.
-    name: A name for this operation (optional).  Defaults to "assert_less_equal"
-
-  Returns:
-    Op that raises `InvalidArgumentError` if `x <= y` is False.
-  """
-  with ops.op_scope([x, y, data], name, 'assert_less_equal'):
-    x = ops.convert_to_tensor(x, name='x')
-    y = ops.convert_to_tensor(y, name='y')
-    if data is None:
-      data = [
-          'Condition x <= y did not hold element-wise: x = ',
-          x.name, x, 'y = ', y.name, y]
-    condition = math_ops.reduce_all(math_ops.less_equal(x, y))
-    return logging_ops.Assert(condition, data, summarize=summarize)
-
-
-def assert_rank(x, rank, data=None, summarize=None, name=None):
-  """Assert `x` has rank equal to `rank`.
-
-  Args:
-    x:  Numeric `Tensor`.
-    rank:  Scalar `Tensor`.
-    data:  The tensors to print out if the condition is False.  Defaults to
-      error message and first few entries of `x`.
-    summarize: Print this many entries of each tensor.
-    name: A name for this operation (optional).  Defaults to "assert_rank".
-
-  Returns:
-    Op raising `InvalidArgumentError` unless `x` has specified rank.
-
-  Raises:
-    ValueError:  If static checks determine `x` has wrong rank.
-  """
-  with ops.op_scope([x], name, 'assert_rank'):
-    x = ops.convert_to_tensor(x, name='x')
-    rank = ops.convert_to_tensor(rank, name='rank')
-
-    # Attempt to statically defined rank.
-    x_rank_static = x.get_shape().ndims
-    rank_static = tensor_util.constant_value(rank)
-    if x_rank_static is not None and rank_static is not None:
-      if x_rank_static != rank_static:
-        raise ValueError(
-            'Tensor %s must have rank %d.  Received rank %d, shape %s'
-            % (x.name, rank_static, x_rank_static, x.get_shape()))
-      return control_flow_ops.no_op(name='static_checks_determined_all_ok')
-
-    # Assert dynamically.
-    if data is None:
-      data = [
-          'Tensor %s must have rank' % x.name,
-          rank,
-          'Received shape: ',
-          array_ops.shape(x)]
-    condition = math_ops.equal(array_ops.rank(x), rank)
-    return logging_ops.Assert(condition, data, summarize=summarize)
-
-
-def assert_rank_at_least(x, rank, data=None, summarize=None, name=None):
-  """Assert `x` has rank equal to `rank` or higher.
-
-  Args:
-    x:  Numeric `Tensor`.
-    rank:  Scalar `Tensor`.
-    data:  The tensors to print out if the condition is False.  Defaults to
-      error message and first few entries of `x`.
-    summarize: Print this many entries of each tensor.
-    name: A name for this operation (optional).
-      Defaults to "assert_rank_at_least".
-
-  Returns:
-    Op raising `InvalidArgumentError` unless `x` has specified rank or higher.
-
-  Raises:
-    ValueError:  If static checks determine `x` has wrong rank.
-  """
-  with ops.op_scope([x], name, 'assert_rank_at_least'):
-    x = ops.convert_to_tensor(x, name='x')
-    rank = ops.convert_to_tensor(rank, name='rank')
-
-    # Attempt to statically defined rank.
-    x_rank_static = x.get_shape().ndims
-    rank_static = tensor_util.constant_value(rank)
-    if x_rank_static is not None and rank_static is not None:
-      if x_rank_static < rank_static:
-        raise ValueError(
-            'Tensor %s must have rank %d.  Received rank %d, shape %s'
-            % (x.name, rank_static, x_rank_static, x.get_shape()))
-      return control_flow_ops.no_op(name='static_checks_determined_all_ok')
-
-    if data is None:
-      data = [
-          'Tensor %s must have rank at least' % x.name,
-          rank,
-          'Received shape: ',
-          array_ops.shape(x)]
-    condition = math_ops.greater_equal(array_ops.rank(x), rank)
-    return logging_ops.Assert(condition, data, summarize=summarize)
-
-
-def _get_diff_for_monotonic_comparison(x):
-  """Gets the difference x[1:] - x[:-1]."""
-  x = array_ops.reshape(x, [-1])
-  if not is_numeric_tensor(x):
-    raise ValueError('Expected x to be numeric, instead found: %s' % x)
-
-  # If x has less than 2 elements, there is nothing to compare.  So return [].
-  is_shorter_than_two = math_ops.less(array_ops.size(x), 2)
-  short_result = lambda: ops.convert_to_tensor([], dtype=x.dtype)
-
-  # With 2 or more elements, return x[1:] - x[:-1]
-  s_len = array_ops.shape(x) - 1
-  diff = lambda: array_ops.slice(x, [1], s_len) - array_ops.slice(x, [0], s_len)
-  return control_flow_ops.cond(is_shorter_than_two, short_result, diff)
-
-
-def is_non_decreasing(x, name=None):
-  """Returns `True` if `x` is non-decreasing.
-
-  Elements of `x` are compared in row-major order.  The tensor `[x[0],...]`
-  is non-decreasing if for every adjacent pair we have `x[i] <= x[i+1]`.
-  If `x` has less than two elements, it is trivially non-decreasing.
-
-  See also:  `is_strictly_increasing`
-
-  Args:
-    x: Numeric `Tensor`.
-    name: A name for this operation (optional).  Defaults to "is_non_decreasing"
-
-  Returns:
-    Boolean `Tensor`, equal to `True` iff `x` is non-decreasing.
-
-  Raises:
-    ValueError: if `x` is not a numeric tensor.
-  """
-  with ops.op_scope([x], name, 'is_non_decreasing'):
-    diff = _get_diff_for_monotonic_comparison(x)
-    # When len(x) = 1, diff = [], less_equal = [], and reduce_all([]) = True.
-    zero = ops.convert_to_tensor(0, dtype=diff.dtype)
-    return math_ops.reduce_all(math_ops.less_equal(zero, diff))
-
-
-def is_strictly_increasing(x, name=None):
-  """Returns `True` if `x` is strictly increasing.
-
-  Elements of `x` are compared in row-major order.  The tensor `[x[0],...]`
-  is strictly increasing if for every adjacent pair we have `x[i] < x[i+1]`.
-  If `x` has less than two elements, it is trivially strictly increasing.
-
-  See also:  `is_non_decreasing`
-
-  Args:
-    x: Numeric `Tensor`.
-    name: A name for this operation (optional).
-      Defaults to "is_strictly_increasing"
-
-  Returns:
-    Boolean `Tensor`, equal to `True` iff `x` is strictly increasing.
-
-  Raises:
-    ValueError: if `x` is not a numeric tensor.
-  """
-  with ops.op_scope([x], name, 'is_strictly_increasing'):
-    diff = _get_diff_for_monotonic_comparison(x)
-    # When len(x) = 1, diff = [], less = [], and reduce_all([]) = True.
-    zero = ops.convert_to_tensor(0, dtype=diff.dtype)
-    return math_ops.reduce_all(math_ops.less(zero, diff))
+    'assert_same_float_dtype',
+    'assert_scalar_int',
+    'convert_to_tensor_or_sparse_tensor',
+    'is_tensor',
+    'reduce_sum_n',
+    'remove_squeezable_dimensions',
+    'with_shape',
+    'with_same_shape']
 
 
 def _assert_same_base_type(items, expected_type=None):
-  """Asserts all items are of the same base type.
+  r"""Asserts all items are of the same base type.
 
   Args:
     items: List of graph items (e.g., `Variable`, `Tensor`, `SparseTensor`,
@@ -380,6 +46,7 @@ def _assert_same_base_type(items, expected_type=None):
         will be ignored.
     expected_type: Expected type. If not specified, assert all items are
         of the same base type.
+
   Returns:
     Validated type, or none if neither expected_type nor items provided.
 
@@ -448,27 +115,6 @@ def assert_scalar_int(tensor):
   return tensor
 
 
-def is_numeric_tensor(tensor):
-  return isinstance(tensor, ops.Tensor) and tensor.dtype in NUMERIC_TYPES
-
-
-# TODO(ptucker): Move to tf.variables?
-def local_variable(initial_value, validate_shape=True, name=None):
-  """Create variable and add it to `GraphKeys.LOCAL_VARIABLES` collection.
-
-  Args:
-    initial_value: See variables.Variable.__init__.
-    validate_shape: See variables.Variable.__init__.
-    name: See variables.Variable.__init__.
-  Returns:
-    New variable.
-  """
-  return variables.Variable(
-      initial_value, trainable=False,
-      collections=[ops.GraphKeys.LOCAL_VARIABLES],
-      validate_shape=validate_shape, name=name)
-
-
 def reduce_sum_n(tensors, name=None):
   """Reduce tensors to a scalar sum.
 
@@ -490,12 +136,57 @@ def reduce_sum_n(tensors, name=None):
   tensors = [math_ops.reduce_sum(t, name='%s/sum' % t.op.name) for t in tensors]
   if len(tensors) == 1:
     return tensors[0]
-  with ops.op_scope(tensors, name, 'reduce_sum_n') as scope:
+  with ops.name_scope(name, 'reduce_sum_n', tensors) as scope:
     return math_ops.add_n(tensors, name=scope)
 
 
+def remove_squeezable_dimensions(predictions, labels):
+  """Squeeze last dim if ranks of `predictions` and `labels` differ by 1.
+
+  This will use static shape if available. Otherwise, it will add graph
+  operations, which could result in a performance hit.
+
+  Args:
+    predictions: Predicted values, a `Tensor` of arbitrary dimensions.
+    labels: Label values, a `Tensor` whose dimensions match `predictions`.
+
+  Returns:
+    Tuple of `predictions` and `labels`, possibly with last dim squeezed.
+  """
+  predictions = ops.convert_to_tensor(predictions)
+  labels = ops.convert_to_tensor(labels)
+  predictions_shape = predictions.get_shape()
+  predictions_rank = predictions_shape.ndims
+  labels_shape = labels.get_shape()
+  labels_rank = labels_shape.ndims
+  if (labels_rank is not None) and (predictions_rank is not None):
+    # Use static rank.
+    rank_diff = predictions_rank - labels_rank
+    if rank_diff == -1:
+      labels = array_ops.squeeze(labels, [-1])
+    elif rank_diff == 1:
+      predictions = array_ops.squeeze(predictions, [-1])
+    return predictions, labels
+
+  # Use dynamic rank.
+  rank_diff = array_ops.rank(predictions) - array_ops.rank(labels)
+  if (predictions_rank is None) or (
+      predictions_shape.dims[-1].is_compatible_with(1)):
+    predictions = control_flow_ops.cond(
+        math_ops.equal(1, rank_diff),
+        lambda: array_ops.squeeze(predictions, [-1]),
+        lambda: predictions)
+  if (labels_rank is None) or (
+      labels_shape.dims[-1].is_compatible_with(1)):
+    labels = control_flow_ops.cond(
+        math_ops.equal(-1, rank_diff),
+        lambda: array_ops.squeeze(labels, [-1]),
+        lambda: labels)
+  return predictions, labels
+
+
 def _all_equal(tensor0, tensor1):
-  with ops.op_scope([tensor0, tensor1], 'all_equal') as scope:
+  with ops.name_scope('all_equal', values=[tensor0, tensor1]) as scope:
     return math_ops.reduce_all(
         math_ops.equal(tensor0, tensor1, name='equal'), name=scope)
 
@@ -509,7 +200,7 @@ def _is_rank(expected_rank, actual_tensor):
   Returns:
     New tensor.
   """
-  with ops.op_scope([actual_tensor], 'is_rank') as scope:
+  with ops.name_scope('is_rank', values=[actual_tensor]) as scope:
     expected = ops.convert_to_tensor(expected_rank, name='expected')
     actual = array_ops.rank(actual_tensor, name='actual')
     return math_ops.equal(expected, actual, name=scope)
@@ -525,7 +216,7 @@ def _is_shape(expected_shape, actual_tensor, actual_shape=None):
   Returns:
     New tensor.
   """
-  with ops.op_scope([actual_tensor], 'is_shape') as scope:
+  with ops.name_scope('is_shape', values=[actual_tensor]) as scope:
     is_rank = _is_rank(array_ops.size(expected_shape), actual_tensor)
     if actual_shape is None:
       actual_shape = array_ops.shape(actual_tensor, name='actual')
@@ -545,10 +236,10 @@ def _assert_shape_op(expected_shape, actual_tensor):
   Returns:
     New assert tensor.
   """
-  with ops.op_scope([actual_tensor], 'assert_shape') as scope:
+  with ops.name_scope('assert_shape', values=[actual_tensor]) as scope:
     actual_shape = array_ops.shape(actual_tensor, name='actual')
     is_shape = _is_shape(expected_shape, actual_tensor, actual_shape)
-    return logging_ops.Assert(
+    return control_flow_ops.Assert(
         is_shape, [
             'Wrong shape for %s [expected] [actual].' % actual_tensor.name,
             expected_shape,
@@ -565,7 +256,7 @@ def with_same_shape(expected_tensor, tensor):
   Returns:
     Tuple of (actual_tensor, label_tensor), possibly with assert ops added.
   """
-  with ops.op_scope([expected_tensor, tensor], '%s/' % tensor.op.name):
+  with ops.name_scope('%s/' % tensor.op.name, values=[expected_tensor, tensor]):
     tensor_shape = expected_tensor.get_shape()
     expected_shape = (
         tensor_shape.as_list() if tensor_shape.is_fully_defined()
@@ -573,8 +264,20 @@ def with_same_shape(expected_tensor, tensor):
     return with_shape(expected_shape, tensor)
 
 
-def _is_tensor(t):
-  return isinstance(t, (ops.Tensor, ops.SparseTensor, variables.Variable))
+def is_tensor(x):
+  """Check for tensor types.
+
+  Check whether an object is a tensor. Equivalent to
+  `isinstance(x, [tf.Tensor, tf.SparseTensor, tf.Variable])`.
+
+  Args:
+    x: An python object to check.
+
+  Returns:
+    `True` if `x` is a tensor, `False` if not.
+  """
+  tensor_types = (ops.Tensor, ops.SparseTensor, variables.Variable)
+  return isinstance(x, tensor_types)
 
 
 def with_shape(expected_shape, tensor):
@@ -597,7 +300,7 @@ def with_shape(expected_shape, tensor):
     raise ValueError('SparseTensor not supported.')
 
   # Shape type must be 1D int32.
-  if _is_tensor(expected_shape):
+  if is_tensor(expected_shape):
     if expected_shape.dtype.base_dtype != dtypes.int32:
       raise ValueError(
           'Invalid dtype %s for shape %s expected of tensor %s.' % (
@@ -622,24 +325,56 @@ def with_shape(expected_shape, tensor):
 
   actual_shape = tensor.get_shape()
 
-  if not actual_shape.is_fully_defined() or _is_tensor(expected_shape):
-    with ops.op_scope([tensor], '%s/' % tensor.op.name):
-      if not _is_tensor(expected_shape) and (len(expected_shape) < 1):
+  if not actual_shape.is_fully_defined() or is_tensor(expected_shape):
+    with ops.name_scope('%s/' % tensor.op.name, values=[tensor]):
+      if not is_tensor(expected_shape) and (len(expected_shape) < 1):
         # TODO(irving): Remove scalar special case
         return array_ops.reshape(tensor, [])
       with ops.control_dependencies([_assert_shape_op(expected_shape, tensor)]):
         result = array_ops.identity(tensor)
-      if not _is_tensor(expected_shape):
+      if not is_tensor(expected_shape):
         result.set_shape(expected_shape)
       return result
 
-  if (not _is_tensor(expected_shape) and
+  if (not is_tensor(expected_shape) and
       not actual_shape.is_compatible_with(expected_shape)):
     if (len(expected_shape) < 1) and actual_shape.is_compatible_with([1]):
       # TODO(irving): Remove scalar special case.
-      with ops.op_scope([tensor], '%s/' % tensor.op.name):
+      with ops.name_scope('%s/' % tensor.op.name, values=[tensor]):
         return array_ops.reshape(tensor, [])
     raise ValueError('Invalid shape for tensor %s, expected %s, got %s.' % (
         tensor.name, expected_shape, actual_shape))
 
   return tensor
+
+
+def convert_to_tensor_or_sparse_tensor(
+    value, dtype=None, name=None, as_ref=False):
+  """Converts value to a `SparseTensor` or `Tensor`.
+
+  Args:
+    value: A `SparseTensor`, `SparseTensorValue`, or an object whose type has a
+      registered `Tensor` conversion function.
+    dtype: Optional element type for the returned tensor. If missing, the
+      type is inferred from the type of `value`.
+    name: Optional name to use if a new `Tensor` is created.
+    as_ref: True if we want the result as a ref tensor. Only used if a new
+      `Tensor` is created.
+
+  Returns:
+    A `SparseTensor` or `Tensor` based on `value`.
+
+  Raises:
+    RuntimeError: If result type is incompatible with `dtype`.
+  """
+  if dtype is not None:
+    dtype = dtypes.as_dtype(dtype)
+  if isinstance(value, ops.SparseTensorValue):
+    value = ops.SparseTensor.from_value(value)
+  if isinstance(value, ops.SparseTensor):
+    if dtype and not dtype.is_compatible_with(value.dtype):
+      raise RuntimeError(
+          'Sparse dtype: requested = %s, actual = %s' % (
+              dtype.name, value.dtype.name))
+    return value
+  return ops.convert_to_tensor(value, dtype=dtype, name=name, as_ref=as_ref)
